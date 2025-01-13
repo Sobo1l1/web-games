@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Snake Game</title>
+    <style>
+        #game-board {
+            border: 1px solid black;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .controls {
+            margin: 20px;
+        }
+        #debug {
+            margin: 20px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="game-board" width="400" height="400"></canvas>
+    <div class="controls">
+        <div>Score: <span id="score">0</span></div>
+        <button onclick="startGame()">Start New Game</button>
+    </div>
+    <div id="debug"></div>
+
+    <script>
+        const canvas = document.getElementById('game-board');
+        const ctx = canvas.getContext('2d');
+        const cellSize = 20;
+        let gameState = null;
+        let ws = null;
+
+        function debug(msg) {
+            const debugDiv = document.getElementById('debug');
+            debugDiv.textContent = JSON.stringify(msg, null, 2);
+        }
+
+        function startGame() {
+            if (ws) {
+                ws.close();
+            }
+
+            ws = new WebSocket('ws://localhost:8000/snake/ws');
+            
+            ws.onopen = function() {
+                debug('Connected to game server');
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    gameState = JSON.parse(event.data);
+                    debug(gameState);
+                    draw();
+                } catch (e) {
+                    debug('Error parsing: ' + e.message);
+                }
+            };
+
+            ws.onerror = function(error) {
+                debug('WebSocket error: ' + error);
+            };
+
+            ws.onclose = function() {
+                debug('Disconnected from game server');
+                gameState = null;
+                draw();
+            };
+        }
+
+        function draw() {
+            if (!gameState) return;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid
+            ctx.strokeStyle = '#ddd';
+            for(let i = 0; i <= canvas.width; i += cellSize) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+            
+            // Draw snake
+            ctx.fillStyle = 'green';
+            gameState.snake.forEach(([x, y]) => {
+                ctx.fillRect(
+                    x * cellSize, 
+                    y * cellSize, 
+                    cellSize - 1, 
+                    cellSize - 1
+                );
+            });
+            
+            // Draw food
+            ctx.fillStyle = 'red';
+            const [foodX, foodY] = gameState.food;
+            ctx.fillRect(
+                foodX * cellSize, 
+                foodY * cellSize, 
+                cellSize - 1, 
+                cellSize - 1
+            );
+            
+            // Update score
+            document.getElementById('score').textContent = gameState.score;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!ws || ws.readyState !== WebSocket.OPEN || !gameState) return;
+            
+            const directions = {
+                'ArrowUp': 'UP',
+                'ArrowDown': 'DOWN',
+                'ArrowLeft': 'LEFT',
+                'ArrowRight': 'RIGHT'
+            };
+
+            if (directions[e.key]) {
+                const direction = directions[e.key];
+                debug('Sending direction: ' + direction);
+                ws.send(JSON.stringify({ direction }));
+            }
+        });
+
+        // Draw empty grid on load
+        ctx.strokeStyle = '#ddd';
+        for(let i = 0; i <= canvas.width; i += cellSize) {
+            ctx.beginPath();
+            ctx.moveTo(i, 0);
+            ctx.lineTo(i, canvas.height);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, i);
+            ctx.lineTo(canvas.width, i);
+            ctx.stroke();
+        }
+    </script>
+</body>
+</html>
